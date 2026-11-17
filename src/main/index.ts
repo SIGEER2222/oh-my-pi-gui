@@ -53,7 +53,11 @@ applyGpuFallbackIfNeeded();
 // Single instance lock
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-	app.quit();
+	// `app.quit()` has to pass the before-quit latch in app-quit.ts, which
+	// preventDefaults every quit it did not ask for. That latch does release a
+	// refused instance in practice (its risk is zero), but `app.exit` ends the
+	// process before whenReady instead of relying on that branch.
+	app.exit(0);
 }
 
 // App identity: the dev run shows "Electron" + the default atom icon in the
