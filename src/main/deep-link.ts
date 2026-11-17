@@ -3,7 +3,7 @@
  * Supports omp://session/<id> and omp://new.
  */
 import { isAbsolute, resolve } from "node:path";
-import { app } from "electron";
+import { app, type BrowserWindow } from "electron";
 import { type DeepLinkPayload, IPC_EVENTS } from "../shared/ipc-types";
 import { launchArguments, launchFolder, parseLaunchArgv } from "./launch-argv";
 import type { SpawnWindow, WindowManager } from "./window";
@@ -59,8 +59,18 @@ export function setupDeepLinks(windowManager: WindowManager, spawnWindow: SpawnW
 		const request = parseLaunchArgv(launchArguments(argv, process.defaultApp), PROTOCOL);
 		if (request.kind === "url") handleDeepLink(request.url, windowManager, spawnWindow);
 		else if (request.kind === "path") handleOpenPath(request.path, windowManager, spawnWindow);
-		else windowManager.getTargetWindow()?.focus();
+		// A bare launch asks to see the app. Focusing alone was a no-op while the
+		// window sat hidden (tray "Hide OMP GUI"), so every relaunch looked dead.
+		else surfaceWindow(windowManager.getTargetWindow() ?? spawnWindow());
 	});
+}
+
+/** Un-hide and raise a window: `focus()` cannot bring back a hidden one. */
+function surfaceWindow(win: BrowserWindow | null): void {
+	if (!win || win.isDestroyed()) return;
+	if (win.isMinimized()) win.restore();
+	win.show();
+	win.focus();
 }
 
 /**
@@ -73,9 +83,7 @@ export function handleOpenPath(path: string, windowManager: WindowManager, spawn
 	const target = resolve(path);
 	for (const win of windowManager.getAllWindows()) {
 		if (windowManager.recordFor(win)?.cwd !== target) continue;
-		if (win.isMinimized()) win.restore();
-		win.show();
-		win.focus();
+		surfaceWindow(win);
 		return;
 	}
 	spawnWindow(target);
